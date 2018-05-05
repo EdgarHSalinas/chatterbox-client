@@ -121,6 +121,7 @@ describe('chatterbox', function() {
         app.init();
 
         $('#main').find('.username').trigger('click');
+        console.log($('#main').find('.username'));
         expect(app.handleUsernameClick.called).to.be.true;
 
         app.handleUsernameClick.restore();
@@ -130,13 +131,13 @@ describe('chatterbox', function() {
         sinon.spy(app, 'handleSubmit');
 
         $('#message').val('Why so many Mel Brooks quotes?');
-
+        console.log($('#message'));
         app.init();
 
         $('#send .submit').trigger('submit');
         expect(app.handleSubmit.calledOnce).to.be.true;
 
-        app.handleSubmit.restore();
+        // app.handleSubmit.restore();
       });
     });
   });
