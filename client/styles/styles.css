@@ -88,3 +88,8 @@ form input[type=text] {
     color: #fff;
     background-color: #0090da;
 }
+
+.new-room {
+    color: rgba(192, 191, 191, 0.863);
+    font-size: 90%;
+}
