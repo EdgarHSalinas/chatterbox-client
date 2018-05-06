@@ -4,10 +4,16 @@ app = {
 
   server: "http://parse.sfm6.hackreactor.com/chatterbox/classes/messages",
 
+  newMessageAlertShown: false,
+
   messageList: [],
 
+  lastRawFetchedData: [],
+
+  roomDictionary: {},
+
   init: () => {
-    app.fetch();
+    app.fetch(true);
   },
 
   send: (message) => {
@@ -22,6 +28,14 @@ app = {
       data: JSON.stringify(message),
       success: function (data) {
         console.log('chatterbox: Message sent');
+        console.log(data);
+        let updatedMessage = {};
+        _.extend(updatedMessage, message);
+        _.extend(updatedMessage, data);
+        app.messageList.unshift(updatedMessage);
+        app.lastRawFetchedData.unshift(updatedMessage);
+        app.renderMessage(updatedMessage, false);
+        app.showSendingMessageStatus("success", "Message sent successfully");
       },
       error: function (data) {
         // See: https://developer.mozilla.org/en-US/docs/Web/API/console.error
@@ -30,7 +44,7 @@ app = {
     })
   },
 
-  fetch: () => {
+  fetch: (firstTime=false) => {
     $.ajax({
       // This is the url you should use to communicate with the parse API server.
       url: "http://parse.sfm6.hackreactor.com/chatterbox/classes/messages",
@@ -38,29 +52,68 @@ app = {
       contentType: 'application/json',
       data: { order: "-createdAt" },
       success: function (data) {
-        console.log('fetch worked!');
+        // console.log('fetch worked!');
         console.log(data.results);
         data = data.results;
 
-        var roomObj = {};
 
-        data.forEach(message => {
-          if (!roomObj[message.roomname]) {
-            roomObj[message.roomname] = true;
-          }
-          app.messageList.push(message);
-          app.renderMessage(message)
-        });
+        console.log(data[0].objectId);
+        if (app.lastRawFetchedData.length>0 && data[0].objectId!==app.lastRawFetchedData[0].objectId) {
 
-        for (let roomname in roomObj) {
-          if (roomname !== "undefined" && roomname !== "" && roomname !== "null" && roomname.toLowerCase() !== "all" && roomname.toLowerCase() !== "all rooms" ) {
-            console.log('ROOMNAME', roomname);
-            app.addToRoomList(roomname)
+          // if not firstTime fetching, show new message alert
+          if (!firstTime) {
+            console.log("NEW MESSAGE AVAILABLE");
+            if (!app.newMessageAlertShown) {
+              app.newMessageAlertShown= true;
+              var newAlert = $('<div class="alert alert-primary" id="new-alert">New messages available </div>')
+              var newAlertRefresh = $('<span class="new-alert-refresh"></span>');
+              var refreshButton = $('<button class="btn btn-primary btn-sm id="new-alert-refresh-btn"> Refresh <i class="fa fa-refresh" aria-hidden="true"></i></button>');
+              refreshButton.on("click", ()=> {
+                var roomname = $('#roomSelect').val();
+                console.log("refresh roomname", roomname);
+                app.renderRoomContent(roomname);
+              });
+              newAlertRefresh.append(refreshButton);
+              newAlert.append(newAlertRefresh);
+
+              $('#chats').prepend(newAlert);
+            }
           }
+
         }
+        app.lastRawFetchedData=data;
+          // app.clearMessages();
+
+          // var roomObj = {};
+          if (!firstTime) {
+            app.messageList=[];
+          }
+          data.forEach(message => {
+            if (message.username && message.text) {
+              if (!app.roomDictionary[message.roomname]) {
+                app.roomDictionary[message.roomname] = {inRoomNameList: false};
+              }
+              app.messageList.push(message);
+              if (firstTime) {
+                app.renderMessage(message)
+              }
+            }
+          });
+
+          for (let roomname in app.roomDictionary) {
+            console.log("app.roomDictionary", app.roomDictionary);
+            if (roomname !== "undefined" && roomname !== "" && roomname !== "null" && roomname.toLowerCase() !== "all" && roomname.toLowerCase() !== "all rooms" ) {
+              if (!app.roomDictionary[roomname].inRoomNameList) {
+                app.addToRoomList(roomname)
+                console.log("app.roomDictionary[roomname]", app.roomDictionary[roomname]);
+                app.roomDictionary[roomname].inRoomNameList=true;
+              }
+            }
+          }
+
       },
+
       error: function (data) {
-        // See: https://developer.mozilla.org/en-US/docs/Web/API/console.error
         console.error('chatterbox: Failed to fetch message', data);
       }
     });
@@ -70,36 +123,41 @@ app = {
     $('#chats').empty();
   },
 
-  renderMessage: (messageData) => {
+  renderMessage: (messageData, append=true) => {
     // console.log(messageData);
     var node = $('<div>');
-    node.addClass("chat");
+    node.addClass("chat card border border-info my-2 p-3");
+    // node.addClass("card");
 
     var userNode = $('<div>');
-    userNode.addClass('username');
+    userNode.addClass('username font-weight-bold');
     userNode.text(messageData.username);
     userNode.on('click', function () {
       app.handleUsernameClick(messageData.username);
     })
 
-    var dateNode = $('<div>');
-    dateNode.addClass('date');
-    dateNode.text(messageData.createdAt);
+    // var dateNode = $('<div>');
+    // dateNode.addClass('date');
+    // dateNode.text(messageData.createdAt);
 
     var messageNode = $('<div>');
-    messageNode.addClass('message');
+    messageNode.addClass('message text-muted');
     messageNode.text(messageData.text);
 
 
     node.append(userNode);
     node.append(messageNode);
-    node.append(dateNode);
+    // node.append(dateNode);
 
-    $('#chats').append(node);
+    if (append) {
+      $('#chats').append(node);
+    } else {
+      $('#chats').prepend(node);
+    }
 
   },
 
-  renderRoom: (roomname) => {
+  renderRoomContent: (roomname) => {
     app.clearMessages();
     if (roomname === "all") {
       app.messageList.forEach(message => app.renderMessage(message));
@@ -108,7 +166,7 @@ app = {
     }
   },
 
-  addToRoomList: (roomname) => {
+  renderRoom: (roomname) => {
     $('#roomSelect').append($(`<option class="roomOption" value=${roomname}>${roomname}</option>`))
   },
 
@@ -117,13 +175,32 @@ app = {
   },
 
   handleSubmit: (data) => {
-    // console.log('submitted');
-    // app.send($("form#send").serialize());
-    app.send(data);
+    if (data.text) {
+      app.send(data);
+    } else {
+      app.showSendingMessageStatus("warning", "Message can't be empty");
+    }
   },
 
   showAlert: () => {
     alert("alert something");
+  },
+
+  refresh: (roomname) => {
+    app.clearMessages();
+    app.renderRoomContent(roomname);
+  },
+
+  showSendingMessageStatus(alertType="danger", alertMessage="Error: Something went wrong!") {
+    var node = $('<div id="message-sent-status" class="alert"></div>');
+
+    node.text(alertMessage)
+    node.addClass(`alert-${alertType}`);
+    $("#chats").prepend(node);
+    $("#chats").prepend($("#new-alert"));
+    setTimeout(() => {
+      $("#message-sent-status").remove();
+    },5000)
   }
 }
 
@@ -148,9 +225,10 @@ $(document).ready(function () {
     var messageObj = {
       username,
       text,
-      roomname: ""
+      roomname: roomSelected+""
     }
-    app.handleSubmit(messageObj)
+    app.handleSubmit(messageObj);
+    $("#message").val('')
   })
 
   // NEW ROOM REQUEST
@@ -169,16 +247,22 @@ $(document).ready(function () {
       if (newRoomName) {
         $("#roomSelect").append($(`<option val=${newRoomName}>${newRoomName}</option>`))
         $("#roomSelect").val(`${newRoomName}`);
+        app.clearMessages();
       }
     } else {
-      app.renderRoom($("#roomSelect").val());
+      app.renderRoomContent($("#roomSelect").val());
     }
   })
 
 
-  // $("#message").on("input", function(event){
-  //   // console.log(event.target.value);
-  // })
+  setInterval(() => {
+    app.fetch(false);
+  }, 10000);
+
+  $("#logo-brand").on("click", () => {
+    console.log("logo clicked");
+    app.renderRoomContent("all");
+  })
 
 
 
